@@ -47,6 +47,7 @@ fatJar.group = 'build'
 task testRun(type: JavaExec) {
     main = "ch.poole.osm.qa.address.GWRcompare"
     classpath = sourceSets.main.runtimeClasspath
-    args('-c', 'jdbc:postgresql://172.16.200.1/gis', '-p', System.getenv('GIS_DATABASE_PASSWORD'), '-m', "Bergdietikon")
+    def password = System.getenv('GIS_DATABASE_PASSWORD')
+    args('-c', 'jdbc:postgresql://172.16.200.1/gis', '-p', password != null ? password : "", '-m', "Bergdietikon")
 }
 testRun.group = 'Run'
