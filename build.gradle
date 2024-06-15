@@ -1,0 +1,52 @@
+
+
+plugins {
+    id 'application'
+}
+
+repositories {
+    // Use Maven Central for resolving dependencies.
+    mavenCentral()
+}
+
+version = '0.0.9'
+
+dependencies {
+    implementation 'org.postgresql:postgresql:42.7.3'
+    implementation 'commons-cli:commons-cli:1.4'
+    implementation 'org.jetbrains:annotations:15.0'
+    
+    testImplementation 'junit:junit:4.13.2'
+}
+
+// Apply a specific Java toolchain to ease working on different environments.
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+application {
+    // Define the main class for the application.
+    mainClass = 'ch.poole.osm.qa.address.GWRcompare'
+}
+
+//create a single Jar with all dependencies
+task fatJar(type: Jar, dependsOn: build) {
+    manifest {
+        attributes 'Implementation-Title': 'GWR - OSM compare',
+        'Implementation-Version': "${project.version}"
+    }
+    archiveBaseName = project.name + '-all'
+    duplicatesStrategy= "exclude"
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    with jar
+}
+fatJar.group = 'build'
+
+task testRun(type: JavaExec) {
+    main = "ch.poole.osm.qa.address.GWRcompare"
+    classpath = sourceSets.main.runtimeClasspath
+    args('-c', 'jdbc:postgresql://172.16.200.1/gis', '-p', System.getenv('GIS_DATABASE_PASSWORD'), '-m', "Bergdietikon")
+}
+testRun.group = 'Run'
