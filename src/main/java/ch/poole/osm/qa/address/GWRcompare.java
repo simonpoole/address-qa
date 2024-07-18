@@ -31,6 +31,7 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.postgresql.util.PSQLException;
 
 public class GWRcompare {
 
@@ -257,7 +258,9 @@ public class GWRcompare {
                                     + "tags->'addr:street' as street, tags->'addr:street:de' as streetde,  tags->'addr:street:fr' as streetfr, tags->'addr:street:it' as streetit, tags->'addr:street:rm' as streetrm, "
                                     + "tags->'addr:place' as aplace,  tags->'addr:place:de' as placede,  tags->'addr:place:fr' as placefr, tags->'addr:place:it' as placeit, tags->'addr:place:rm' as placerm, "
                                     + "tags->'addr:postcode' as postcode, tags->'addr:city' as city, tags->'addr:full' as afull, ST_X(ST_Transform(p.way,4326)), ST_Y(ST_Transform(p.way,4326)) from planet_osm_point p,buffered_boundaries b "
-                                    + "where (p.\"addr:housenumber\" is not NULL   or p.\"addr:housename\" is not NULL  or  exist(p.tags , 'addr:full')  or  exist(p.tags , 'addr:conscriptionnumber')) AND St_IsValid(b.way) AND St_Covers(b.way,p.way) and b.osm_id=?");) {
+                                    + "where (p.\"addr:housenumber\" is not NULL   or p.\"addr:housename\" is not NULL  or  exist(p.tags , 'addr:full')  or  exist(p.tags , 'addr:conscriptionnumber')) AND St_IsValid(b.way) AND St_Covers(b.way,p.way) and b.osm_id=?");
+                    PreparedStatement updateStats = conn.prepareStatement("update muni_address_stats set density=? where muni_ref=?");
+                    PreparedStatement insertStats = conn.prepareStatement("insert into muni_address_stats (muni_ref,density) values(?,?)");) {
                 // loop over municipalities
                 while (municipalities.next()) {
                     long muniBoundaryId = municipalities.getInt(1);
@@ -397,6 +400,20 @@ public class GWRcompare {
 
                     writeGeoJosnListToFile(warnings, warningsFile);
                     writeGeoJosnListToFile(missing, missingFile);
+
+                    if (gwrCount != 0) {
+                        double density = osmTotal / (double) gwrCount;
+                        long muniRefLong = Long.parseLong(muniRef);
+                        updateStats.setDouble(1, density);
+                        updateStats.setLong(2, muniRefLong);
+                        try {
+                            updateStats.executeUpdate();
+                        } catch (PSQLException psqex) {
+                            insertStats.setLong(1, muniRefLong);
+                            insertStats.setDouble(2, density);
+                            insertStats.executeUpdate();
+                        }
+                    }
                 }
                 pw.println("<tr class=\"sortbottom\"><td><b>TOTAL</b></td><td></td><td align=\"right\"><b>" + gwrAddressesCount
                         + "</b></td><td></td><td align=\"right\"><b>" + (osmBuildingAddressesCount + osmNodeAddressesCount) + "</b></td><td align=\"right\"><b>"
