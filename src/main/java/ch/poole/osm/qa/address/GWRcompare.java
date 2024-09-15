@@ -122,7 +122,11 @@ public class GWRcompare {
         String      osmGeom;
         long        osmId;
         boolean     postcode;
+        String      osmPostcode;
+        String      gwrPostcode;
         boolean     city;
+        String      osmCity;
+        String      gwrCity;
         boolean     place;
         boolean     distance;
         boolean     noStreet;
@@ -149,7 +153,11 @@ public class GWRcompare {
             s.append("\"OSM geometry\":\"" + osmGeom + "\",");
             s.append("\"OSM id\":" + osmId + ",");
             s.append("\"missing or wrong addr:postcode\":\"" + postcode + "\",");
+            s.append("\"OSM postcode\":\"" + osmPostcode + "\",");
+            s.append("\"GWR postcode\":\"" + gwrPostcode + "\",");
             s.append("\"missing or wrong addr:city\":\"" + city + "\",");
+            s.append("\"OSM city\":\"" + osmCity + "\",");
+            s.append("\"GWR city\":\"" + gwrCity + "\",");
             s.append("\"addr:street instead of addr:place\":\"" + place + "\",");
             s.append("\"distance more than 50 m\":\"" + distance + "\",");
             s.append("\"no addr:street or addr:place\":\"" + noStreet + "\",");
@@ -331,10 +339,14 @@ public class GWRcompare {
                             if (!gwr.postcode.equals(osm.postcode)) {
                                 postcode.add(osm);
                                 w.postcode = true;
+                                w.osmPostcode = osm.postcode;
+                                w.gwrPostcode = gwr.postcode;
                             }
                             if (!gwr.city.equals(osm.city)) {
                                 city.add(osm);
                                 w.city = true;
+                                w.osmCity = osm.city;
+                                w.gwrCity = gwr.city;
                             }
                             if (haversineDistance(gwr.lon, gwr.lat, osm.lon, osm.lat) > 50) {
                                 distance.add(osm);
@@ -398,8 +410,8 @@ public class GWRcompare {
                             + (osmAddresses.size() - noStreet) + "</td><td align=\"right\">" + "<a href=\"https://qa.poole.ch/addresses/ch/"
                             + warningsFile.getPath() + "\" download=\"warnings-" + muniRef + ".geojson\">" + warnings.size() + "</a></td></tr>");
 
-                    writeGeoJosnListToFile(warnings, warningsFile);
-                    writeGeoJosnListToFile(missing, missingFile);
+                    writeGeoJsonListToFile(warnings, warningsFile);
+                    writeGeoJsonListToFile(missing, missingFile);
 
                     if (gwrCount != 0) {
                         double density = osmTotal / (double) gwrCount;
@@ -431,13 +443,13 @@ public class GWRcompare {
     }
 
     /**
-     * Write a list of objects to a GeoJosn FeatureCollection in a file
+     * Write a list of objects to a GeoJson FeatureCollection in a file
      * 
      * @param list the list of objects
      * @param file the File
      * @throws FileNotFoundException
      */
-    private <T extends GeoJsonOut> void writeGeoJosnListToFile(@NotNull List<T> list, @NotNull File file) throws FileNotFoundException {
+    private <T extends GeoJsonOut> void writeGeoJsonListToFile(@NotNull List<T> list, @NotNull File file) throws FileNotFoundException {
         try (PrintWriter writer = new PrintWriter(new FileOutputStream(file))) {
             writer.println("{\"type\":\"FeatureCollection\",");
             writer.println("\"features\":[");
@@ -455,7 +467,7 @@ public class GWRcompare {
     }
 
     /**
-     * @param osmGeom an indication of this i for a polygon or a point
+     * @param osmGeom an indication of if this is for a polygon or a point
      * @param osmAddresses a Map that will contain the osm addresses
      * @param addresses the ResultSet from the database
      * @param gwrAddressesMap the GWR addresses for the municipality
@@ -488,10 +500,10 @@ public class GWRcompare {
     /**
      * Add all non-housenumber fields
      * 
-     * @param osmGeom
-     * @param addresses
-     * @param address
-     * @param gwrAddressesMap
+     * @param osmGeom the OSM geometry
+     * @param addresses ResultSet with OSM addresses from query
+     * @param address Address object
+     * @param gwrAddressesMap the GWR addresses
      * @throws SQLException
      */
     private static void addNonNumberFields(@NotNull String osmGeom, @NotNull ResultSet addresses, @NotNull Address address,
