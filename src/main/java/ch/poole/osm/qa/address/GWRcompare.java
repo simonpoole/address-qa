@@ -436,7 +436,7 @@ public class GWRcompare {
                         }
                     }
                 }
-                pw.println("<tr class=\"sortbottom\"><td><b>TOTAL</b></td><td></td><td align=\"right\"><b>" + gwrAddressesCount
+                pw.println("<tr class=\"sortbottom\"><td><b>TOTAL</b></td><td></td><td></td><td align=\"right\"><b>" + gwrAddressesCount
                         + "</b></td><td></td><td align=\"right\"><b>" + (osmBuildingAddressesCount + osmNodeAddressesCount) + "</b></td><td align=\"right\"><b>"
                         + osmBuildingAddressesCount + "</b></td><td align=\"right\"><b>" + osmNodeAddressesCount + "</b></td>");
                 pw.println("<td align=\"right\"><b>" + matchingCount + "</b></td><td align=\"right\"><b>" + missingCount + "</b></td><td align=\"right\">"
