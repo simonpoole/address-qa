@@ -237,7 +237,7 @@ public class GWRcompare {
 
             pw.println("<H3>Updated - " + new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(System.currentTimeMillis())) + "</H3>");
             pw.println("<table class=\"sortable\">");
-            pw.println("<tr><th>Municipality</th><th>GWR Data</th>" + "<th class=\"sorttable_numeric\">GWR</th>" + "<th class=\"sorttable_numeric\">%GWR</th>"
+            pw.println("<tr><th>Municipality</th><th>Canton</th><th>GWR Data</th>" + "<th class=\"sorttable_numeric\">GWR</th>" + "<th class=\"sorttable_numeric\">%GWR</th>"
                     + "<th class=\"sorttable_numeric\">OSM<BR>Total</th>" + "<th class=\"sorttable_numeric\">OSM<BR>Buildings</th>"
                     + "<th class=\"sorttable_numeric\">OSM<BR>Nodes</th>" + "<th class=\"sorttable_numeric\">Matching</th>"
                     + "<th class=\"sorttable_numeric\">Missing</th>" + "<th class=\"sorttable_numeric\">Different or<br>missing<br>postcode</th>"
@@ -268,13 +268,22 @@ public class GWRcompare {
                                     + "tags->'addr:postcode' as postcode, tags->'addr:city' as city, tags->'addr:full' as afull, ST_X(ST_Transform(p.way,4326)), ST_Y(ST_Transform(p.way,4326)) from planet_osm_point p,buffered_boundaries b "
                                     + "where (p.\"addr:housenumber\" is not NULL   or p.\"addr:housename\" is not NULL  or  exist(p.tags , 'addr:full')  or  exist(p.tags , 'addr:conscriptionnumber')) AND St_IsValid(b.way) AND St_Covers(b.way,p.way) and b.osm_id=?");
                     PreparedStatement updateStats = conn.prepareStatement("update muni_address_stats set density=? where muni_ref=?");
-                    PreparedStatement insertStats = conn.prepareStatement("insert into muni_address_stats (muni_ref,density) values(?,?)");) {
+                    PreparedStatement insertStats = conn.prepareStatement("insert into muni_address_stats (muni_ref,density) values(?,?)");
+                    PreparedStatement muniCantonQuery = conn.prepareStatement("select distinct gdekt from gwr_addresses where gdenr=?");) {
                 // loop over municipalities
                 while (municipalities.next()) {
                     long muniBoundaryId = municipalities.getInt(1);
                     String muniName = municipalities.getString(2);
                     String muniRef = municipalities.getString(3);
-
+                    
+                    // get canton
+                    muniCantonQuery.setInt(1, Integer.parseInt(muniRef));
+                    ResultSet canton = muniCantonQuery.executeQuery();
+                    String muniCanton = "?";
+                    if (canton.next()) {
+                        muniCanton = canton.getString(1);
+                    }
+                    
                     // get GWR addresses
                     Map<String, Address> gwrAddressesMap = new HashMap<>();
                     gwrAddressQuery.setString(1, muniRef);
@@ -386,7 +395,7 @@ public class GWRcompare {
                     noStreetCount += noStreet;
                     nonGWRCount += osmAddresses.size() - noStreet;
                     warningsCount += warnings.size();
-                    pw.print("<tr><td>" + muniName + "</td><td align=\"center\">" + "<a href=\"https://qa.poole.ch/addresses/GWR/" + muniRef
+                    pw.print("<tr><td>" + muniName + "</td><td>" + muniCanton + "</td><td align=\"center\">" + "<a href=\"https://qa.poole.ch/addresses/GWR/" + muniRef
                             + ".zip\">S</a> <a href=\"https://qa.poole.ch/addresses/GWR/" + muniRef
                             + ".geojson.zip\">G</a> <a href=\"https://qa.poole.ch/addresses/GWR/" + muniRef
                             + ".osm.zip\">O</a> <a href=\"https://qa.poole.ch/addresses/GWR/" + muniRef
