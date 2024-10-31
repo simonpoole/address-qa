@@ -422,7 +422,8 @@ public class GWRcompare {
                         }
                         warnings.add(w);
                     }
-                    matchingCount += matching.size();
+                    final int osmMatching = matching.size();
+                    matchingCount += osmMatching;
                     matchingAncillaryCount += matchingAncillary.size();
                     missingCount += missing.size();
                     postcodeCount += postcode.size();
@@ -446,10 +447,10 @@ public class GWRcompare {
                             + "</td>");
                     File warningsFile = new File(warningsDir, muniRef + ".geojson");
                     File missingFile = new File(missingDir, muniRef + ".geojson");
-                    pw.println("<td align=\"right\">" + matching.size() + "</td>");
+                    pw.println("<td align=\"right\">" + osmMatching + "</td>");
 
                     if (gwrCount != 0) {
-                        pw.printf("<td align=\"right\">%1$d</td>", (int) (matching.size() * 100f / gwrCount));
+                        pw.printf("<td align=\"right\">%1$d</td>", (int) (osmMatching * 100f / gwrCount));
                     } else {
                         pw.print("<td align=\"right\">-</td>");
                     }
@@ -465,7 +466,7 @@ public class GWRcompare {
                     writeGeoJsonListToFile(missing, missingFile);
 
                     if (gwrCount != 0) {
-                        double density = osmTotal / (double) (gwrCount + gwrAncillaryCount);
+                        double density = osmMatching / (double) gwrCount;
                         long muniRefLong = Long.parseLong(muniRef);
                         updateStats.setDouble(1, density);
                         updateStats.setLong(2, muniRefLong);
