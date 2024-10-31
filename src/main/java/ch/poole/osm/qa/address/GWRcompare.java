@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -64,6 +66,8 @@ public class GWRcompare {
     private static final String GWR_LANG_DE           = "9901";
     private static final String SWISSTOPO_STREET_GEOM = "Street";
 
+    private static final Pattern ANCILLARY_NUMBER = Pattern.compile("^[^\\.]+\\.\\d+$");
+
     interface GeoJsonOut {
         String toGeoJson();
     }
@@ -81,12 +85,19 @@ public class GWRcompare {
         String postcode;
         String city;
         String full;
+        int    gwrCategory;
+        int    gwrClass;
         float  lon;
         float  lat;
 
         @Override
         public String toString() {
             return housenumber + " " + street;
+        }
+
+        public boolean isAncillary() {
+            Matcher m = housenumber != null ? ANCILLARY_NUMBER.matcher(housenumber) : null;
+            return gwrCategory == 1010 || gwrCategory == 1080 || gwrClass == 1242 || (m != null && m.find());
         }
 
         /**
@@ -174,18 +185,20 @@ public class GWRcompare {
     }
 
     // global counters
-    private int osmBuildingAddressesCount = 0;
-    private int osmNodeAddressesCount     = 0;
-    private int gwrAddressesCount         = 0;
-    private int matchingCount             = 0;
-    private int missingCount              = 0;
-    private int postcodeCount             = 0;
-    private int cityCount                 = 0;
-    private int distanceCount             = 0;
-    private int noStreetCount             = 0;
-    private int nonGWRCount               = 0;
-    private int placeCount                = 0;
-    private int warningsCount             = 0;
+    private int osmBuildingAddressesCount  = 0;
+    private int osmNodeAddressesCount      = 0;
+    private int gwrAddressesCount          = 0;
+    private int gwrAncillaryAddressesCount = 0;
+    private int matchingCount              = 0;
+    private int matchingAncillaryCount     = 0;
+    private int missingCount               = 0;
+    private int postcodeCount              = 0;
+    private int cityCount                  = 0;
+    private int distanceCount              = 0;
+    private int noStreetCount              = 0;
+    private int nonGWRCount                = 0;
+    private int placeCount                 = 0;
+    private int warningsCount              = 0;
 
     public static void main(String[] args) {
 
@@ -237,10 +250,12 @@ public class GWRcompare {
 
             pw.println("<H3>Updated - " + new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(System.currentTimeMillis())) + "</H3>");
             pw.println("<table class=\"sortable\">");
-            pw.println("<tr><th>Municipality</th><th>Canton</th><th>GWR Data</th>" + "<th class=\"sorttable_numeric\">GWR</th>" + "<th class=\"sorttable_numeric\">%GWR</th>"
-                    + "<th class=\"sorttable_numeric\">OSM<BR>Total</th>" + "<th class=\"sorttable_numeric\">OSM<BR>Buildings</th>"
-                    + "<th class=\"sorttable_numeric\">OSM<BR>Nodes</th>" + "<th class=\"sorttable_numeric\">Matching</th>"
-                    + "<th class=\"sorttable_numeric\">Missing</th>" + "<th class=\"sorttable_numeric\">Different or<br>missing<br>postcode</th>"
+            pw.println("<tr><th>Municipality</th><th>Canton</th><th>GWR Data</th>" + "<th class=\"sorttable_numeric\">GWR</th>"
+                    + "<th class=\"sorttable_numeric\">GWR<BR>ancillary</th>" + "<th class=\"sorttable_numeric\">OSM<BR>Total</th>"
+                    + "<th class=\"sorttable_numeric\">OSM<BR>Buildings</th>" + "<th class=\"sorttable_numeric\">OSM<BR>Nodes</th>"
+                    + "<th class=\"sorttable_numeric\">Matching</th>" + "<th class=\"sorttable_numeric\">%<BR>Matching</th>"
+                    + "<th class=\"sorttable_numeric\">Matching<BR>ancillary</th>" + "<th class=\"sorttable_numeric\">Missing</th>"
+                    + "<th class=\"sorttable_numeric\">Different or<br>missing<br>postcode</th>"
                     + "<th class=\"sorttable_numeric\">Different or<br>missing<br>city</th>"
                     + "<th class=\"sorttable_numeric\">Distance<br>more than<br>50 m</th>"
                     + "<th class=\"sorttable_numeric\">addr:street<br>instead of<br>addr:place</th>"
@@ -252,9 +267,9 @@ public class GWRcompare {
                             ? stmt.executeQuery("select distinct osm_id,name,muni_ref from buffered_boundaries where name='" + municipality + "'")
                             : stmt.executeQuery("select distinct osm_id,name,muni_ref from buffered_boundaries b order by name");
                     PreparedStatement gwrAddressQuery = conn.prepareStatement(
-                            "select EGID, EDID, g.ESID, g.GDENR, GDENAME, STRNAME, DEINR, PLZ4, PLZZ, PLZNAME, STRSP, strtype, ST_X(loc), ST_Y(loc) from gwr_addresses g, planet_osm_polygon p, esid_type e "
+                            "select EGID, EDID, g.ESID, g.GDENR, GDENAME, STRNAME, DEINR, PLZ4, PLZZ, PLZNAME, STRSP, strtype, gkat, gklas, ST_X(loc), ST_Y(loc) from gwr_addresses g, planet_osm_polygon p, esid_type e "
                                     + "where p.boundary='administrative' and p.admin_level='8' and tags->'swisstopo:BFS_NUMMER'=? and e.esid=g.esid and ST_Contains(ST_Transform(p.way,4326),g.loc) "
-                                    + "and g.gstat = 1004 and NOT DEINR LIKE('%.%') and NOT (gkat = 1010 or gkat = 1080 or gklas = 1242)");
+                                    + "and g.gstat = 1004");
                     PreparedStatement osmBuildingAddressQuery = conn
                             .prepareStatement("with mp as (select ST_Multi(ST_Collect(way)) as w from planet_osm_polygon where osm_id = ?) "
                                     + "select p.osm_id as osmid,\"addr:housenumber\" as housenumber,\"addr:housename\" as housename, "
@@ -276,7 +291,7 @@ public class GWRcompare {
                     long muniBoundaryId = municipalities.getInt(1);
                     String muniName = municipalities.getString(2);
                     String muniRef = municipalities.getString(3);
-                    
+
                     // get canton
                     muniCantonQuery.setInt(1, Integer.parseInt(muniRef));
                     ResultSet canton = muniCantonQuery.executeQuery();
@@ -284,14 +299,15 @@ public class GWRcompare {
                     if (canton.next()) {
                         muniCanton = canton.getString(1);
                     }
-                    
+
                     // get GWR addresses
                     Map<String, Address> gwrAddressesMap = new HashMap<>();
                     gwrAddressQuery.setString(1, muniRef);
                     ResultSet gwrAddresses = gwrAddressQuery.executeQuery();
                     int gwrCount = 0;
+                    int gwrAncillaryCount = 0;
+                    int gwrNoNumber = 0;
                     while (gwrAddresses.next()) {
-                        gwrCount++;
                         Address address = new Address();
                         address.housenumber = gwrAddresses.getString(7);
                         address.street = gwrAddresses.getString(6);
@@ -314,11 +330,22 @@ public class GWRcompare {
                         }
                         address.postcode = gwrAddresses.getString(8);
                         address.city = gwrAddresses.getString(10);
-                        address.lon = gwrAddresses.getFloat(13);
-                        address.lat = gwrAddresses.getFloat(14);
+                        address.gwrCategory = gwrAddresses.getInt(13);
+                        address.gwrClass = gwrAddresses.getInt(14);
+                        address.lon = gwrAddresses.getFloat(15);
+                        address.lat = gwrAddresses.getFloat(16);
+                        if (!address.isAncillary()) {
+                            gwrCount++;
+                        } else {
+                            gwrAncillaryCount++;
+                        }
+                        if (address.housenumber == null) {
+                            gwrNoNumber++;
+                        }
                         gwrAddressesMap.put(createKey(address.street, address.housenumber), address);
                     }
                     gwrAddressesCount += gwrCount;
+                    gwrAncillaryAddressesCount += gwrAncillaryCount;
 
                     Map<String, Address> osmAddresses = new HashMap<>();
 
@@ -335,6 +362,7 @@ public class GWRcompare {
 
                     //
                     List<Address> matching = new ArrayList<>();
+                    List<Address> matchingAncillary = new ArrayList<>();
                     List<Address> missing = new ArrayList<>();
                     List<Address> postcode = new ArrayList<>();
                     List<Address> city = new ArrayList<>();
@@ -344,6 +372,7 @@ public class GWRcompare {
                     for (Address gwr : new ArrayList<>(gwrAddressesMap.values())) {
                         final String key = createKey(gwr.street, gwr.housenumber);
                         Address osm = osmAddresses.get(key);
+                        final boolean ancillary = gwr.isAncillary();
                         if (osm != null) {
                             Warnings w = new Warnings(osm.osmGeom, osm.osmId, osm.lon, osm.lat);
                             if (!gwr.postcode.equals(osm.postcode)) {
@@ -366,15 +395,21 @@ public class GWRcompare {
                                 place.add(osm);
                                 w.place = true;
                             }
-                            if (w.hasWarning()) {
-                                warnings.add(w);
+                            if (ancillary) {
+                                matchingAncillary.add(osm);
+                            } else {
+                                if (w.hasWarning()) {
+                                    warnings.add(w);
+                                }
+                                matching.add(osm);
                             }
-                            matching.add(osm);
                             gwrAddressesMap.remove(key);
                             osmAddresses.remove(key);
                             continue;
                         }
-                        missing.add(gwr);
+                        if (!ancillary) {
+                            missing.add(gwr);
+                        }
                     }
                     int noStreet = 0;
                     for (Address leftOver : osmAddresses.values()) {
@@ -388,6 +423,7 @@ public class GWRcompare {
                         warnings.add(w);
                     }
                     matchingCount += matching.size();
+                    matchingAncillaryCount += matchingAncillary.size();
                     missingCount += missing.size();
                     postcodeCount += postcode.size();
                     cityCount += city.size();
@@ -396,24 +432,29 @@ public class GWRcompare {
                     noStreetCount += noStreet;
                     nonGWRCount += osmAddresses.size() - noStreet;
                     warningsCount += warnings.size();
-                    pw.print("<tr><td>" + muniName + "</td><td>" + muniCanton + "</td><td align=\"center\">" + "<a href=\"https://qa.poole.ch/addresses/GWR/" + muniRef
-                            + ".zip\">S</a> <a href=\"https://qa.poole.ch/addresses/GWR/" + muniRef
+                    pw.print("<tr><td>" + muniName + "</td><td>" + muniCanton + "</td><td align=\"center\">" + "<a href=\"https://qa.poole.ch/addresses/GWR/"
+                            + muniRef + ".zip\">S</a> <a href=\"https://qa.poole.ch/addresses/GWR/" + muniRef
                             + ".geojson.zip\">G</a> <a href=\"https://qa.poole.ch/addresses/GWR/" + muniRef
                             + ".osm.zip\">O</a> <a href=\"https://qa.poole.ch/addresses/GWR/" + muniRef
                             + "_all.geojson.zip\">GA</a> <a href=\"https://qa.poole.ch/addresses/GWR/" + muniRef + "_all.osm.zip\">OA</a></td>");
                     pw.print("<td align=\"right\">" + gwrCount + "</td>");
+                    pw.print("<td align=\"right\">" + gwrAncillaryCount + "</td>");
 
                     final int osmTotal = osmBuildingsCount + osmNodesCount;
-                    if (gwrCount != 0) {
-                        pw.printf("<td align=\"right\">%1$d</td>", (int) (osmTotal * 100f / gwrCount));
-                    } else {
-                        pw.print("<td align=\"right\">-</td>");
-                    }
+
                     pw.println("<td align=\"right\">" + osmTotal + "</td><td align=\"right\">" + osmBuildingsCount + "</td><td align=\"right\">" + osmNodesCount
                             + "</td>");
                     File warningsFile = new File(warningsDir, muniRef + ".geojson");
                     File missingFile = new File(missingDir, muniRef + ".geojson");
-                    pw.println("<td align=\"right\">" + matching.size() + "</td><td align=\"right\">" + "<a href=\"https://qa.poole.ch/addresses/ch/"
+                    pw.println("<td align=\"right\">" + matching.size() + "</td>");
+
+                    if (gwrCount != 0) {
+                        pw.printf("<td align=\"right\">%1$d</td>", (int) (matching.size() * 100f / gwrCount));
+                    } else {
+                        pw.print("<td align=\"right\">-</td>");
+                    }
+
+                    pw.println("<td align=\"right\">" + matchingAncillary.size() + "</td><td align=\"right\">" + "<a href=\"https://qa.poole.ch/addresses/ch/"
                             + missingFile.getPath() + "\" download=\"missing-" + muniRef + ".geojson\">" + missing.size() + "</a></td><td align=\"right\">"
                             + postcode.size() + "</td><td align=\"right\">" + city.size() + "</td><td align=\"right\">" + distance.size()
                             + "</td><td align=\"right\">" + place.size() + "</td><td align=\"right\">" + noStreet + "</td><td align=\"right\">"
@@ -424,7 +465,7 @@ public class GWRcompare {
                     writeGeoJsonListToFile(missing, missingFile);
 
                     if (gwrCount != 0) {
-                        double density = osmTotal / (double) gwrCount;
+                        double density = osmTotal / (double) (gwrCount + gwrAncillaryCount);
                         long muniRefLong = Long.parseLong(muniRef);
                         updateStats.setDouble(1, density);
                         updateStats.setLong(2, muniRefLong);
@@ -438,16 +479,25 @@ public class GWRcompare {
                     }
                 }
                 pw.println("<tr class=\"sortbottom\"><td><b>TOTAL</b></td><td></td><td></td><td align=\"right\"><b>" + gwrAddressesCount
-                        + "</b></td><td></td><td align=\"right\"><b>" + (osmBuildingAddressesCount + osmNodeAddressesCount) + "</b></td><td align=\"right\"><b>"
-                        + osmBuildingAddressesCount + "</b></td><td align=\"right\"><b>" + osmNodeAddressesCount + "</b></td>");
-                pw.println("<td align=\"right\"><b>" + matchingCount + "</b></td><td align=\"right\"><b>" + missingCount + "</b></td><td align=\"right\">"
+                        + "</b></td><td align=\"right\">" + gwrAncillaryAddressesCount + "</td><td align=\"right\"><b>"
+                        + (osmBuildingAddressesCount + osmNodeAddressesCount) + "</b></td><td align=\"right\"><b>" + osmBuildingAddressesCount
+                        + "</b></td><td align=\"right\"><b>" + osmNodeAddressesCount + "</b></td>");
+                pw.println("<td align=\"right\"><b>" + matchingCount + "</b></td>");
+                if (gwrAddressesCount != 0) {
+                    pw.printf("<td align=\"right\">%1$d</td>", (int) (matchingCount * 100f / gwrAddressesCount));
+                } else {
+                    pw.print("<td align=\"right\">-</td>");
+                }
+                pw.println("<td align=\"right\">" + matchingAncillaryCount + "</td><td align=\"right\"><b>" + missingCount + "</b></td><td align=\"right\">"
                         + postcodeCount + "</td><td align=\"right\">" + cityCount + "</td><td align=\"right\">" + distanceCount + "</td><td align=\"right\">"
                         + placeCount + "</td><td align=\"right\">" + noStreetCount + "</td><td align=\"right\">" + nonGWRCount + "</td><td align=\"right\"><b>"
                         + warningsCount + "</b></td></tr>");
 
                 pw.println("</table>");
             }
-        } catch (FileNotFoundException | SQLException e) {
+        } catch (FileNotFoundException |
+
+                SQLException e) {
             e.printStackTrace();
         }
     }
