@@ -79,6 +79,10 @@ public class GWRcompare {
         String housenumber;
         String housename;
         String street;
+        String streetDe;
+        String streetFr;
+        String streetIt;
+        String streetRm;
         String place;
         String streetType;
         String streetLang;
@@ -112,9 +116,33 @@ public class GWRcompare {
             s.append("\"properties\":{");
             s.append("\"addr:housenumber\":\"" + housenumber + "\",");
             if (SWISSTOPO_STREET_GEOM.equals(streetType)) {
-                s.append("\"addr:street\":\"" + street + "\",");
+                s.append("\"addr:street\":\"" + (street != null ? street : "") + "\",");
+                if (streetDe != null) {
+                    s.append("\"addr:street:de\":\"" + streetDe + "\",");
+                }
+                if (streetFr != null) {
+                    s.append("\"addr:street:fr\":\"" + streetFr + "\",");
+                }
+                if (streetIt != null) {
+                    s.append("\"addr:street:it\":\"" + streetIt + "\",");
+                }
+                if (streetRm != null) {
+                    s.append("\"addr:street:rm\":\"" + streetRm + "\",");
+                }
             } else {
-                s.append("\"addr:place\":\"" + street + "\",");
+                s.append("\"addr:place\":\"" + (street != null ? street : "") + "\",");
+                if (streetDe != null) {
+                    s.append("\"addr:place:de\":\"" + streetDe + "\",");
+                }
+                if (streetFr != null) {
+                    s.append("\"addr:place:fr\":\"" + streetFr + "\",");
+                }
+                if (streetIt != null) {
+                    s.append("\"addr:place:it\":\"" + streetIt + "\",");
+                }
+                if (streetRm != null) {
+                    s.append("\"addr:place:rm\":\"" + streetRm + "\",");
+                }
             }
             s.append("\"addr:postcode\":\"" + postcode + "\",");
             s.append("\"addr:city\":\"" + city + "\"");
@@ -267,7 +295,7 @@ public class GWRcompare {
                             ? stmt.executeQuery("select distinct osm_id,name,muni_ref from buffered_boundaries where name='" + municipality + "'")
                             : stmt.executeQuery("select distinct osm_id,name,muni_ref from buffered_boundaries b order by name");
                     PreparedStatement gwrAddressQuery = conn.prepareStatement(
-                            "select EGID, EDID, g.ESID, g.GDENR, GDENAME, STRNAME, DEINR, PLZ4, PLZZ, PLZNAME, STRSP, strtype, gkat, gklas, ST_X(loc), ST_Y(loc) from gwr_addresses g, planet_osm_polygon p, esid_type e "
+                            "select EGID, EGAID, g.ESID, g.GDENR, GDENAME, STRNAME, DEINR, PLZ4, PLZZ, PLZNAME, STRSP, strtype, gkat, gklas, ST_X(loc), ST_Y(loc) from gwr_addresses g, planet_osm_polygon p, esid_type e "
                                     + "where p.boundary='administrative' and p.admin_level='8' and tags->'swisstopo:BFS_NUMMER'=? and e.esid=g.esid and ST_Contains(ST_Transform(p.way,4326),g.loc) "
                                     + "and g.gstat = 1004");
                     PreparedStatement osmBuildingAddressQuery = conn
@@ -302,12 +330,57 @@ public class GWRcompare {
 
                     // get GWR addresses
                     Map<String, Address> gwrAddressesMap = new HashMap<>();
+                    Map<Long, Address> seen = new HashMap<>();
                     gwrAddressQuery.setString(1, muniRef);
                     ResultSet gwrAddresses = gwrAddressQuery.executeQuery();
                     int gwrCount = 0;
                     int gwrAncillaryCount = 0;
                     int gwrNoNumber = 0;
                     while (gwrAddresses.next()) {
+                        long addressId = gwrAddresses.getLong(2);
+                        Address seenAddress = seen.get(addressId);
+                        if (seenAddress != null) {
+                            // multilingual
+                            if (seenAddress.street != null) {
+                                // move to correct language
+                                switch (seenAddress.streetLang) {
+                                case LANG_DE:
+                                    seenAddress.streetDe = seenAddress.street;
+                                    break;
+                                case LANG_RM:
+                                    seenAddress.streetRm = seenAddress.street;
+                                    break;
+                                case LANG_FR:
+                                    seenAddress.streetFr = seenAddress.street;
+                                    break;
+                                case LANG_IT:
+                                    seenAddress.streetIt = seenAddress.street;
+                                    break;
+                                default:
+                                    // no language set
+                                }
+                                seenAddress.street = null;
+                            }
+                            // add street name to correct field
+                            String street = gwrAddresses.getString(6);
+                            switch (gwrAddresses.getString(11)) {
+                            case GWR_LANG_DE:
+                                seenAddress.streetDe = street;
+                                break;
+                            case GWR_LANG_RM:
+                                seenAddress.streetRm = street;
+                                break;
+                            case GWR_LANG_FR:
+                                seenAddress.streetFr = street;
+                                break;
+                            case GWR_LANG_IT:
+                                seenAddress.streetIt = street;
+                                break;
+                            default:
+                                // no language set
+                            }
+                            continue;
+                        }
                         Address address = new Address();
                         address.housenumber = gwrAddresses.getString(7);
                         address.street = gwrAddresses.getString(6);
@@ -343,6 +416,7 @@ public class GWRcompare {
                             gwrNoNumber++;
                         }
                         gwrAddressesMap.put(createKey(address.street, address.housenumber), address);
+                        seen.put(addressId, address);
                     }
                     gwrAddressesCount += gwrCount;
                     gwrAncillaryAddressesCount += gwrAncillaryCount;
@@ -370,9 +444,24 @@ public class GWRcompare {
                     List<Address> place = new ArrayList<>();
                     List<Warnings> warnings = new ArrayList<>();
                     for (Address gwr : new ArrayList<>(gwrAddressesMap.values())) {
-                        final String key = createKey(gwr.street, gwr.housenumber);
-                        Address osm = osmAddresses.get(key);
+                        Address osm = null;
+                        String key = null;
+                        if (gwr.street == null) { // multilingual
+                            for (String street : new String[] { gwr.streetDe, gwr.streetRm, gwr.streetFr, gwr.streetIt }) {
+                                if (street != null) {
+                                    key = createKey(street, gwr.housenumber);
+                                    osm = osmAddresses.get(key);
+                                    if (osm != null) {
+                                        break;
+                                    }
+                                }
+                            }
+                        } else {
+                            key = createKey(gwr.street, gwr.housenumber);
+                            osm = osmAddresses.get(key);
+                        }
                         final boolean ancillary = gwr.isAncillary();
+
                         if (osm != null) {
                             Warnings w = new Warnings(osm.osmGeom, osm.osmId, osm.lon, osm.lat);
                             if (!gwr.postcode.equals(osm.postcode)) {
