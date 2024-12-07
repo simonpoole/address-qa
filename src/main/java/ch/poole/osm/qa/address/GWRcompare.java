@@ -383,6 +383,10 @@ public class GWRcompare {
                         }
                         Address address = new Address();
                         address.housenumber = gwrAddresses.getString(7);
+                        if (address.housenumber == null) {
+                            gwrNoNumber++;
+                            continue;
+                        }
                         address.street = gwrAddresses.getString(6);
                         address.streetType = gwrAddresses.getString(12);
                         switch (gwrAddresses.getString(11)) {
@@ -411,9 +415,6 @@ public class GWRcompare {
                             gwrCount++;
                         } else {
                             gwrAncillaryCount++;
-                        }
-                        if (address.housenumber == null) {
-                            gwrNoNumber++;
                         }
                         gwrAddressesMap.put(createKey(address.street, address.housenumber), address);
                         seen.put(addressId, address);
