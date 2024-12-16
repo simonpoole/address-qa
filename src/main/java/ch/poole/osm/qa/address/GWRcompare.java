@@ -297,7 +297,7 @@ public class GWRcompare {
                     PreparedStatement gwrAddressQuery = conn.prepareStatement(
                             "select EGID, EGAID, g.ESID, g.GDENR, GDENAME, STRNAME, DEINR, PLZ4, PLZZ, PLZNAME, STRSP, strtype, gkat, gklas, ST_X(loc), ST_Y(loc) from gwr_addresses g, planet_osm_polygon p, esid_type e "
                                     + "where p.boundary='administrative' and p.admin_level='8' and tags->'swisstopo:BFS_NUMMER'=? and e.esid=g.esid and ST_Contains(ST_Transform(p.way,4326),g.loc) "
-                                    + "and g.gstat = 1004");
+                                    + "and g.gstat = 1004 and doffadr");
                     PreparedStatement osmBuildingAddressQuery = conn
                             .prepareStatement("with mp as (select ST_Multi(ST_Collect(way)) as w from planet_osm_polygon where osm_id = ?) "
                                     + "select p.osm_id as osmid,\"addr:housenumber\" as housenumber,\"addr:housename\" as housename, "
