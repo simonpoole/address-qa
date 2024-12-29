@@ -74,25 +74,26 @@ public class GWRcompare {
 
     private static class Address implements GeoJsonOut {
 
-        String osmGeom;
-        long   osmId;
-        String housenumber;
-        String housename;
-        String street;
-        String streetDe;
-        String streetFr;
-        String streetIt;
-        String streetRm;
-        String place;
-        String streetType;
-        String streetLang;
-        String postcode;
-        String city;
-        String full;
-        int    gwrCategory;
-        int    gwrClass;
-        float  lon;
-        float  lat;
+        String  osmGeom;
+        long    osmId;
+        String  housenumber;
+        String  housename;
+        String  street;
+        String  streetDe;
+        String  streetFr;
+        String  streetIt;
+        String  streetRm;
+        String  place;
+        String  streetType;
+        String  streetLang;
+        String  postcode;
+        String  city;
+        String  full;
+        int     gwrCategory;
+        int     gwrClass;
+        boolean official;
+        float   lon;
+        float   lat;
 
         @Override
         public String toString() {
@@ -169,6 +170,7 @@ public class GWRcompare {
         boolean     place;
         boolean     distance;
         boolean     noStreet;
+        boolean     notOfficial;
         boolean     nonGWR;
         final float lon;
         final float lat;
@@ -181,7 +183,7 @@ public class GWRcompare {
         }
 
         boolean hasWarning() {
-            return postcode || city || distance || place || nonGWR;
+            return postcode || city || distance || place || notOfficial || nonGWR;
         }
 
         @Override
@@ -200,6 +202,7 @@ public class GWRcompare {
             s.append("\"addr:street instead of addr:place\":\"" + place + "\",");
             s.append("\"distance more than 50 m\":\"" + distance + "\",");
             s.append("\"no addr:street or addr:place\":\"" + noStreet + "\",");
+            s.append("\"not official\":\"" + notOfficial + "\",");
             s.append("\"not in GWR\":\"" + nonGWR + "\"");
             s.append("},\n");
             s.append("\"geometry\":{\"type\":\"Point\",\"coordinates\":[");
@@ -224,6 +227,7 @@ public class GWRcompare {
     private int cityCount                  = 0;
     private int distanceCount              = 0;
     private int noStreetCount              = 0;
+    private int notOfficialCount           = 0;
     private int nonGWRCount                = 0;
     private int placeCount                 = 0;
     private int warningsCount              = 0;
@@ -287,17 +291,17 @@ public class GWRcompare {
                     + "<th class=\"sorttable_numeric\">Different or<br>missing<br>city</th>"
                     + "<th class=\"sorttable_numeric\">Distance<br>more than<br>50 m</th>"
                     + "<th class=\"sorttable_numeric\">addr:street<br>instead of<br>addr:place</th>"
-                    + "<th class=\"sorttable_numeric\">addr:street/<br>addr:place<br>missing</th>" + "<th class=\"sorttable_numeric\">Non-GWR</th>"
-                    + "<th class=\"sorttable_numeric\">Warnings<br>total</th></tr>");
+                    + "<th class=\"sorttable_numeric\">addr:street/<br>addr:place<br>missing</th>" + "<th class=\"sorttable_numeric\">Not official</th>"
+                    + "<th class=\"sorttable_numeric\">Non-GWR</th>" + "<th class=\"sorttable_numeric\">Warnings<br>total</th></tr>");
 
             try (Statement stmt = conn.createStatement();
                     ResultSet municipalities = municipality != null
                             ? stmt.executeQuery("select distinct osm_id,name,muni_ref from buffered_boundaries where name='" + municipality + "'")
                             : stmt.executeQuery("select distinct osm_id,name,muni_ref from buffered_boundaries b order by name");
                     PreparedStatement gwrAddressQuery = conn.prepareStatement(
-                            "select EGID, EGAID, g.ESID, g.GDENR, GDENAME, STRNAME, DEINR, PLZ4, PLZZ, PLZNAME, STRSP, strtype, gkat, gklas, ST_X(loc), ST_Y(loc) from gwr_addresses g, planet_osm_polygon p, esid_type e "
+                            "select EGID, EGAID, g.ESID, g.GDENR, GDENAME, STRNAME, DEINR, PLZ4, PLZZ, PLZNAME, STRSP, strtype, gkat, gklas, doffadr, ST_X(loc), ST_Y(loc) from gwr_addresses g, planet_osm_polygon p, esid_type e "
                                     + "where p.boundary='administrative' and p.admin_level='8' and tags->'swisstopo:BFS_NUMMER'=? and e.esid=g.esid and ST_Contains(ST_Transform(p.way,4326),g.loc) "
-                                    + "and g.gstat = 1004 and doffadr");
+                                    + "and g.gstat = 1004");
                     PreparedStatement osmBuildingAddressQuery = conn
                             .prepareStatement("with mp as (select ST_Multi(ST_Collect(way)) as w from planet_osm_polygon where osm_id = ?) "
                                     + "select p.osm_id as osmid,\"addr:housenumber\" as housenumber,\"addr:housename\" as housename, "
@@ -330,12 +334,14 @@ public class GWRcompare {
 
                     // get GWR addresses
                     Map<String, Address> gwrAddressesMap = new HashMap<>();
+                    Map<String, Boolean> gwrHasValidation = new HashMap<>();
                     Map<Long, Address> seen = new HashMap<>();
                     gwrAddressQuery.setString(1, muniRef);
                     ResultSet gwrAddresses = gwrAddressQuery.executeQuery();
                     int gwrCount = 0;
                     int gwrAncillaryCount = 0;
                     int gwrNoNumber = 0;
+                    boolean hasValidation = false;
                     while (gwrAddresses.next()) {
                         long addressId = gwrAddresses.getLong(2);
                         Address seenAddress = seen.get(addressId);
@@ -409,8 +415,12 @@ public class GWRcompare {
                         address.city = gwrAddresses.getString(10);
                         address.gwrCategory = gwrAddresses.getInt(13);
                         address.gwrClass = gwrAddresses.getInt(14);
-                        address.lon = gwrAddresses.getFloat(15);
-                        address.lat = gwrAddresses.getFloat(16);
+                        address.official = gwrAddresses.getBoolean(15);
+                        if (!hasValidation && address.official) {
+                            hasValidation = true;
+                        }
+                        address.lon = gwrAddresses.getFloat(16);
+                        address.lat = gwrAddresses.getFloat(17);
                         if (!address.isAncillary()) {
                             gwrCount++;
                         } else {
@@ -418,6 +428,9 @@ public class GWRcompare {
                         }
                         gwrAddressesMap.put(createKey(address.street, address.housenumber), address);
                         seen.put(addressId, address);
+                    }
+                    if (hasValidation) {
+                        gwrHasValidation.put(muniRef, true);
                     }
                     gwrAddressesCount += gwrCount;
                     gwrAncillaryAddressesCount += gwrAncillaryCount;
@@ -435,6 +448,8 @@ public class GWRcompare {
                     int osmNodesCount = getOsmAddresses("point", osmAddresses, osmNodeAddresses, gwrAddressesMap);
                     osmNodeAddressesCount += osmNodesCount;
 
+                    //
+                    int notOfficial = 0;
                     //
                     List<Address> matching = new ArrayList<>();
                     List<Address> matchingAncillary = new ArrayList<>();
@@ -485,6 +500,10 @@ public class GWRcompare {
                                 place.add(osm);
                                 w.place = true;
                             }
+                            w.notOfficial = !gwr.official;
+                            if (w.notOfficial && !ancillary) {
+                                notOfficial++;
+                            }
                             if (ancillary) {
                                 matchingAncillary.add(osm);
                             } else {
@@ -497,7 +516,7 @@ public class GWRcompare {
                             osmAddresses.remove(key);
                             continue;
                         }
-                        if (!ancillary) {
+                        if (!ancillary && (gwr.official || !gwrHasValidation.containsKey(muniRef))) {
                             missing.add(gwr);
                         }
                     }
@@ -521,6 +540,7 @@ public class GWRcompare {
                     distanceCount += distance.size();
                     placeCount += place.size();
                     noStreetCount += noStreet;
+                    notOfficialCount += notOfficial;
                     nonGWRCount += osmAddresses.size() - noStreet;
                     warningsCount += warnings.size();
                     pw.print("<tr><td>" + muniName + "</td><td>" + muniCanton + "</td><td align=\"center\">" + "<a href=\"https://qa.poole.ch/addresses/GWR/"
@@ -548,9 +568,10 @@ public class GWRcompare {
                     pw.println("<td align=\"right\">" + matchingAncillary.size() + "</td><td align=\"right\">" + "<a href=\"https://qa.poole.ch/addresses/ch/"
                             + missingFile.getPath() + "\" download=\"missing-" + muniRef + ".geojson\">" + missing.size() + "</a></td><td align=\"right\">"
                             + postcode.size() + "</td><td align=\"right\">" + city.size() + "</td><td align=\"right\">" + distance.size()
-                            + "</td><td align=\"right\">" + place.size() + "</td><td align=\"right\">" + noStreet + "</td><td align=\"right\">"
-                            + (osmAddresses.size() - noStreet) + "</td><td align=\"right\">" + "<a href=\"https://qa.poole.ch/addresses/ch/"
-                            + warningsFile.getPath() + "\" download=\"warnings-" + muniRef + ".geojson\">" + warnings.size() + "</a></td></tr>");
+                            + "</td><td align=\"right\">" + place.size() + "</td><td align=\"right\">" + noStreet + "</td><td align=\"right\">" + notOfficial
+                            + "</td><td align=\"right\">" + (osmAddresses.size() - noStreet) + "</td><td align=\"right\">"
+                            + "<a href=\"https://qa.poole.ch/addresses/ch/" + warningsFile.getPath() + "\" download=\"warnings-" + muniRef + ".geojson\">"
+                            + warnings.size() + "</a></td></tr>");
 
                     writeGeoJsonListToFile(warnings, warningsFile);
                     writeGeoJsonListToFile(missing, missingFile);
@@ -581,14 +602,12 @@ public class GWRcompare {
                 }
                 pw.println("<td align=\"right\">" + matchingAncillaryCount + "</td><td align=\"right\"><b>" + missingCount + "</b></td><td align=\"right\">"
                         + postcodeCount + "</td><td align=\"right\">" + cityCount + "</td><td align=\"right\">" + distanceCount + "</td><td align=\"right\">"
-                        + placeCount + "</td><td align=\"right\">" + noStreetCount + "</td><td align=\"right\">" + nonGWRCount + "</td><td align=\"right\"><b>"
-                        + warningsCount + "</b></td></tr>");
+                        + placeCount + "</td><td align=\"right\">" + noStreetCount + "</td><td align=\"right\">" + notOfficialCount
+                        + "</td><td align=\"right\">" + nonGWRCount + "</td><td align=\"right\"><b>" + warningsCount + "</b></td></tr>");
 
                 pw.println("</table>");
             }
-        } catch (FileNotFoundException |
-
-                SQLException e) {
+        } catch (FileNotFoundException | SQLException e) {
             e.printStackTrace();
         }
     }
