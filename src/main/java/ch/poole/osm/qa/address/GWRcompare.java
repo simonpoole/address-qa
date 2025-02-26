@@ -449,11 +449,9 @@ public class GWRcompare {
                     osmBuildingAddressQuery.setLong(1, muniBoundaryId);
                     ResultSet osmBuildingAddresses = osmBuildingAddressQuery.executeQuery();
                     int osmBuildingsCount = getOsmAddresses("polygon", osmAddresses, osmBuildingAddresses, gwrAddressesMap);
-                    System.out.println("count 1" + osmBuildingsCount);
                     osmBuildingAddressQuery2.setLong(1, muniBoundaryId);
                     osmBuildingAddresses = osmBuildingAddressQuery2.executeQuery();
                     osmBuildingsCount += getOsmAddresses("polygon", osmAddresses, osmBuildingAddresses, gwrAddressesMap);
-                    System.out.println("count 2" + osmBuildingsCount);
                     osmBuildingAddressesCount += osmBuildingsCount;
 
                     osmNodeAddressQuery.setLong(1, muniBoundaryId);
