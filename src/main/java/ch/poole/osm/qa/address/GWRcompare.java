@@ -309,6 +309,14 @@ public class GWRcompare {
                                     + "tags->'addr:place' as aplace,  tags->'addr:place:de' as placede,  tags->'addr:place:fr' as placefr, tags->'addr:place:it' as placeit, tags->'addr:place:rm' as placerm, "
                                     + "tags->'addr:postcode' as postcode, tags->'addr:city' as city, tags->'addr:full' as afull, ST_X(ST_PointOnSurface(ST_Transform(p.way,4326))), ST_Y(ST_PointOnSurface(ST_Transform(p.way,4326))) from planet_osm_polygon p,mp "
                                     + "where ST_IsValid(p.way) AND not St_IsEmpty(p.way) AND (p.\"addr:housenumber\" is not NULL or p.\"addr:housename\" is not NULL or exist(p.tags , 'addr:full')  or  exist(p.tags , 'addr:conscriptionnumber')) AND St_IsValid(mp.w) AND St_Covers(mp.w,p.way)");
+                    PreparedStatement osmBuildingAddressQuery2 = conn
+                            .prepareStatement("with mp as (select ST_Multi(ST_Collect(way)) as w from planet_osm_polygon where osm_id = ?) "
+                                    + "select p.osm_id as osmid,\"addr:housenumber\" as housenumber,\"addr:housename\" as housename, "
+                                    + "tags->'addr:street' as street, tags->'addr:street:de' as streetde,  tags->'addr:street:fr' as streetfr, tags->'addr:street:it' as streetit, tags->'addr:street:rm' as streetrm, "
+                                    + "tags->'addr:place' as aplace,  tags->'addr:place:de' as placede,  tags->'addr:place:fr' as placefr, tags->'addr:place:it' as placeit, tags->'addr:place:rm' as placerm, "
+                                    + "tags->'addr:postcode' as postcode, tags->'addr:city' as city, tags->'addr:full' as afull, ST_X(ST_PointOnSurface(ST_Transform(p.way,4326))), ST_Y(ST_PointOnSurface(ST_Transform(p.way,4326))) from planet_osm_line p,mp "
+                                    + "where ST_IsValid(p.way) AND not St_IsEmpty(p.way) AND (p.\"addr:housenumber\" is not NULL or p.\"addr:housename\" is not NULL or exist(p.tags , 'addr:full')  or  exist(p.tags , 'addr:conscriptionnumber')) AND St_IsValid(mp.w) AND St_Covers(mp.w,p.way)");
+
                     PreparedStatement osmNodeAddressQuery = conn
                             .prepareStatement("select p.osm_id as osmid,\"addr:housenumber\" as housenumber,\"addr:housename\" as housename, "
                                     + "tags->'addr:street' as street, tags->'addr:street:de' as streetde,  tags->'addr:street:fr' as streetfr, tags->'addr:street:it' as streetit, tags->'addr:street:rm' as streetrm, "
@@ -441,6 +449,11 @@ public class GWRcompare {
                     osmBuildingAddressQuery.setLong(1, muniBoundaryId);
                     ResultSet osmBuildingAddresses = osmBuildingAddressQuery.executeQuery();
                     int osmBuildingsCount = getOsmAddresses("polygon", osmAddresses, osmBuildingAddresses, gwrAddressesMap);
+                    System.out.println("count 1" + osmBuildingsCount);
+                    osmBuildingAddressQuery2.setLong(1, muniBoundaryId);
+                    osmBuildingAddresses = osmBuildingAddressQuery2.executeQuery();
+                    osmBuildingsCount += getOsmAddresses("polygon", osmAddresses, osmBuildingAddresses, gwrAddressesMap);
+                    System.out.println("count 2" + osmBuildingsCount);
                     osmBuildingAddressesCount += osmBuildingsCount;
 
                     osmNodeAddressQuery.setLong(1, muniBoundaryId);
