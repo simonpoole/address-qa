@@ -593,8 +593,11 @@ public class GWRcompare {
                         updateStats.setDouble(1, density);
                         updateStats.setLong(2, muniRefLong);
                         try {
-                            updateStats.executeUpdate();
-                        } catch (PSQLException psqex) {
+                            int rows = updateStats.executeUpdate();
+                            if (rows == 0) {
+                                throw new SQLException("stats row doesn't exist");
+                            }
+                        } catch (SQLException ex) {
                             insertStats.setLong(1, muniRefLong);
                             insertStats.setDouble(2, density);
                             insertStats.executeUpdate();
