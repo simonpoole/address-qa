@@ -9,7 +9,7 @@ repositories {
     mavenCentral()
 }
 
-version = '0.0.26'
+version = '0.0.27'
 
 dependencies {
     implementation 'org.postgresql:postgresql:42.7.3'
@@ -48,6 +48,6 @@ task testRun(type: JavaExec) {
     main = "ch.poole.osm.qa.address.GWRcompare"
     classpath = sourceSets.main.runtimeClasspath
     def password = System.getenv('GIS_DATABASE_PASSWORD')
-    args('-c', 'jdbc:postgresql://172.16.200.1/gis', '-p', password != null ? password : "", '-m', "Stein")
+    args('-c', 'jdbc:postgresql://172.16.200.1/gis', '-p', password != null ? password : "", '-m', "Bergdietikon")
 }
 testRun.group = 'Run'

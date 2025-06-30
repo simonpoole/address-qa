@@ -33,7 +33,6 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.postgresql.util.PSQLException;
 
 public class GWRcompare {
 
@@ -43,6 +42,9 @@ public class GWRcompare {
      * The arithmetic mean of the two WGS84 reference-ellipsoids.
      */
     public static final int EARTH_RADIUS         = (EARTH_RADIUS_EQUATOR + EARTH_RADIUS_POLAR) / 2;
+
+    // percentage of addresses that have to have the official flag set for it to be considered valid
+    private static final double OFFICIAL_VALID_LIMIT = 0.9;
 
     private static final String WARNINGS_DIR = "warnings";
     private static final String MISSING_DIR  = "missing";
@@ -349,7 +351,7 @@ public class GWRcompare {
                     int gwrCount = 0;
                     int gwrAncillaryCount = 0;
                     int gwrNoNumber = 0;
-                    boolean hasValidation = false;
+                    int officialCount = 0;
                     while (gwrAddresses.next()) {
                         long addressId = gwrAddresses.getLong(2);
                         Address seenAddress = seen.get(addressId);
@@ -424,8 +426,8 @@ public class GWRcompare {
                         address.gwrCategory = gwrAddresses.getInt(13);
                         address.gwrClass = gwrAddresses.getInt(14);
                         address.official = gwrAddresses.getBoolean(15);
-                        if (!hasValidation && address.official) {
-                            hasValidation = true;
+                        if (address.official) {
+                            officialCount++;
                         }
                         address.lon = gwrAddresses.getFloat(16);
                         address.lat = gwrAddresses.getFloat(17);
@@ -437,7 +439,9 @@ public class GWRcompare {
                         gwrAddressesMap.put(createKey(address.street, address.housenumber), address);
                         seen.put(addressId, address);
                     }
-                    if (hasValidation) {
+                    // if more than OFFICIAL_VALID_LIMIT of the addresses have the official flag set assume that the
+                    // flag is valid
+                    if (gwrCount > 0 && officialCount / gwrCount >= OFFICIAL_VALID_LIMIT) {
                         gwrHasValidation.put(muniRef, true);
                     }
                     gwrAddressesCount += gwrCount;
