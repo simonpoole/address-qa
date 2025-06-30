@@ -44,16 +44,17 @@ public class GWRcompare {
     public static final int EARTH_RADIUS         = (EARTH_RADIUS_EQUATOR + EARTH_RADIUS_POLAR) / 2;
 
     // percentage of addresses that have to have the official flag set for it to be considered valid
-    private static final double OFFICIAL_VALID_LIMIT = 0.9;
+    private static final float DEFAULT_OFFICIAL_VALID_LIMIT = 0.8F;
 
     private static final String WARNINGS_DIR = "warnings";
     private static final String MISSING_DIR  = "missing";
 
-    private static final String OUTPUT_OPT       = "output";
-    private static final String USER_OPT         = "user";
-    private static final String PASSWORD_OPT     = "password";
-    private static final String CONNECTION_OPT   = "connection";
-    private static final String MUNICIPALITY_OPT = "municipality";
+    private static final String OUTPUT_OPT               = "output";
+    private static final String USER_OPT                 = "user";
+    private static final String PASSWORD_OPT             = "password";
+    private static final String CONNECTION_OPT           = "connection";
+    private static final String MUNICIPALITY_OPT         = "municipality";
+    private static final String OFFICIAL_VALID_LIMIT_OPT = "limit";
 
     private static final String PASSWORD_PROP = "password";
     private static final String USER_PROP     = "user";
@@ -241,6 +242,8 @@ public class GWRcompare {
         Option passwordOption = Option.builder("p").longOpt(PASSWORD_OPT).hasArg().desc("password, default: none").build();
         Option connectionOption = Option.builder("c").longOpt(CONNECTION_OPT).hasArg().desc("database url, default: jdbc:postgresql://localhost/gis").build();
         Option municipalityOption = Option.builder("m").longOpt(MUNICIPALITY_OPT).hasArg().desc("municiplality name, default is all municiplities").build();
+        Option officialLimitOption = Option.builder("l").longOpt(OFFICIAL_VALID_LIMIT_OPT).hasArg()
+                .desc("limit as a fraction of one, from which on we consider the official flag valid").build();
 
         Options options = new Options();
 
@@ -249,6 +252,7 @@ public class GWRcompare {
         options.addOption(passwordOption);
         options.addOption(connectionOption);
         options.addOption(municipalityOption);
+        options.addOption(officialLimitOption);
 
         CommandLineParser parser = new DefaultParser();
         try {
@@ -258,11 +262,13 @@ public class GWRcompare {
             String user = line.hasOption(USER_OPT) ? line.getOptionValue(USER_OPT) : "www-data";
             String password = line.hasOption(PASSWORD_OPT) ? line.getOptionValue(PASSWORD_OPT) : "";
             String municipality = line.hasOption(MUNICIPALITY_OPT) ? line.getOptionValue(MUNICIPALITY_OPT) : null;
+            float officialValidLimit = line.hasOption(OFFICIAL_VALID_LIMIT_OPT) ? Float.parseFloat(line.getOptionValue(OFFICIAL_VALID_LIMIT_OPT))
+                    : DEFAULT_OFFICIAL_VALID_LIMIT;
             try (OutputStream os = line.hasOption(OUTPUT_OPT) ? new FileOutputStream(line.getOptionValue(OUTPUT_OPT)) : System.out) {
                 GWRcompare app = new GWRcompare();
-                app.run(os, url, user, password, municipality);
+                app.run(os, url, user, password, municipality, officialValidLimit);
             }
-        } catch (ParseException exp) {
+        } catch (ParseException | NumberFormatException exp) {
             HelpFormatter formatter = new HelpFormatter();
             formatter.printHelp(GWRcompare.class.getSimpleName(), options);
         } catch (FileNotFoundException e) {
@@ -272,7 +278,8 @@ public class GWRcompare {
         }
     }
 
-    private void run(@NotNull OutputStream out, @NotNull String connection, @Nullable String user, @Nullable String password, @Nullable String municipality) {
+    private void run(@NotNull OutputStream out, @NotNull String connection, @Nullable String user, @Nullable String password, @Nullable String municipality,
+            float officialValidLimit) {
         Properties props = new Properties();
         props.setProperty(USER_PROP, user);
         props.setProperty(PASSWORD_PROP, password);
@@ -441,7 +448,7 @@ public class GWRcompare {
                     }
                     // if more than OFFICIAL_VALID_LIMIT of the addresses have the official flag set assume that the
                     // flag is valid
-                    if (gwrCount > 0 && officialCount / gwrCount >= OFFICIAL_VALID_LIMIT) {
+                    if (gwrCount > 0 && officialCount / gwrCount >= officialValidLimit) {
                         gwrHasValidation.put(muniRef, true);
                     }
                     gwrAddressesCount += gwrCount;
