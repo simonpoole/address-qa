@@ -9,7 +9,7 @@ repositories {
     mavenCentral()
 }
 
-version = '0.0.29'
+version = '0.0.30'
 
 dependencies {
     implementation 'org.postgresql:postgresql:42.7.3'

@@ -658,6 +658,7 @@ public class GWRcompare {
                         }
                     }
                 }
+                pw.println("<tr class=\"sortbottom\">");
                 printStatsLine(pw, "TOTAL", global);
                 pw.println("</table>");
                 
@@ -679,6 +680,7 @@ public class GWRcompare {
                 Collections.sort(cantonsList);
                 for (String canton : cantonsList) {
                     Stats cantonalStats = cantonal.get(canton);
+                    pw.println("<tr>");
                     printStatsLine(pw, canton, cantonalStats);
                     writeGeoJsonListToFile(cantonalStats.warnings, new File(warningsDir, canton + ".geojson"));
                     writeGeoJsonListToFile(cantonalStats.missing, new File(missingDir, canton + ".geojson"));
@@ -691,14 +693,14 @@ public class GWRcompare {
     }
 
     /**
-     * Print out one line of stats
+     * Print out one line of stats, without the start or the <tr> element
      * 
      * @param pw the PrintWriter
      * @param name name of the line
      * @param stats the Stats object
      */
     private void printStatsLine(@NotNull PrintWriter pw, @NotNull String name, @NotNull Stats stats) {
-        pw.println("<tr class=\"sortbottom\"><td><b>" + name + "</b></td><td></td><td></td><td align=\"right\"><b>" + stats.gwrAddressesCount
+        pw.println("<td><b>" + name + "</b></td><td></td><td></td><td align=\"right\"><b>" + stats.gwrAddressesCount
                 + "</b></td><td align=\"right\">" + stats.gwrAncillaryAddressesCount + "</td><td align=\"right\"><b>"
                 + (stats.osmBuildingAddressesCount + stats.osmNodeAddressesCount) + "</b></td><td align=\"right\"><b>" + stats.osmBuildingAddressesCount
                 + "</b></td><td align=\"right\"><b>" + stats.osmNodeAddressesCount + "</b></td>");
