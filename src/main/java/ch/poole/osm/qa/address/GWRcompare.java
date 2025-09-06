@@ -70,7 +70,7 @@ public class GWRcompare {
     private static final String GWR_LANG_DE           = "9901";
     private static final String SWISSTOPO_STREET_GEOM = "Street";
 
-    private static final Pattern ANCILLARY_NUMBER = Pattern.compile("^[^\\.]+\\..*$");
+    private static final Pattern ANCILLARY_NUMBER = Pattern.compile("^[^\\.]+[\\.\\,].*$");
 
     interface GeoJsonOut {
         String toGeoJson();
