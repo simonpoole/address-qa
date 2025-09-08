@@ -196,18 +196,39 @@ public class GWRcompare {
             s.append("{\"type\":\"Feature\",\n");
             s.append("\"properties\":{");
             s.append("\"OSM geometry\":\"" + osmGeom + "\",");
-            s.append("\"OSM id\":" + osmId + ",");
-            s.append("\"missing or wrong addr:postcode\":\"" + postcode + "\",");
-            s.append("\"OSM postcode\":\"" + osmPostcode + "\",");
-            s.append("\"GWR postcode\":\"" + gwrPostcode + "\",");
-            s.append("\"missing or wrong addr:city\":\"" + city + "\",");
-            s.append("\"OSM city\":\"" + osmCity + "\",");
-            s.append("\"GWR city\":\"" + gwrCity + "\",");
-            s.append("\"addr:street instead of addr:place\":\"" + place + "\",");
-            s.append("\"distance more than 50 m\":\"" + distance + "\",");
-            s.append("\"no addr:street or addr:place\":\"" + noStreet + "\",");
-            s.append("\"not official\":\"" + notOfficial + "\",");
-            s.append("\"not in GWR\":\"" + nonGWR + "\"");
+            s.append("\"OSM id\":" + osmId);
+            if (postcode) {
+                s.append(",");
+                s.append("\"missing or wrong addr:postcode\":\"" + postcode + "\",");
+                s.append("\"OSM postcode\":\"" + osmPostcode + "\",");
+                s.append("\"GWR postcode\":\"" + gwrPostcode + "\"");
+            }
+            if (city) {
+                s.append(",");
+                s.append("\"missing or wrong addr:city\":\"" + city + "\",");
+                s.append("\"OSM city\":\"" + osmCity + "\",");
+                s.append("\"GWR city\":\"" + gwrCity + "\"");
+            }
+            if (place) {
+                s.append(",");
+                s.append("\"addr:street instead of addr:place\":\"" + place + "\"");
+            }
+            if (distance) {
+                s.append(",");
+                s.append("\"distance more than 50 m\":\"" + distance + "\"");
+            }
+            if (noStreet) {
+                s.append(",");
+                s.append("\"no addr:street or addr:place\":\"" + noStreet + "\"");
+            }
+            if (notOfficial) {
+                s.append(",");
+                s.append("\"not official\":\"" + notOfficial + "\"");
+            }
+            if (nonGWR) {
+                s.append(",");
+                s.append("\"not in GWR\":\"" + nonGWR + "\"");
+            }
             s.append("},\n");
             s.append("\"geometry\":{\"type\":\"Point\",\"coordinates\":[");
             s.append(Float.toString(lon));
@@ -661,7 +682,7 @@ public class GWRcompare {
                 pw.println("<tr class=\"sortbottom\">");
                 printStatsLine(pw, "TOTAL", global);
                 pw.println("</table>");
-                
+
                 pw.println("<H4>Cantons</H4>");
                 pw.println("<table class=\"sortable\">");
                 pw.println("<tr><th>Canton</th><th></th><th></th><th class=\"sorttable_numeric\">GWR</th>"
@@ -693,17 +714,19 @@ public class GWRcompare {
     }
 
     /**
-     * Print out one line of stats, without the start or the <tr> element
+     * Print out one line of stats, without the start or the
+     * <tr>
+     * element
      * 
      * @param pw the PrintWriter
      * @param name name of the line
      * @param stats the Stats object
      */
     private void printStatsLine(@NotNull PrintWriter pw, @NotNull String name, @NotNull Stats stats) {
-        pw.println("<td><b>" + name + "</b></td><td></td><td></td><td align=\"right\"><b>" + stats.gwrAddressesCount
-                + "</b></td><td align=\"right\">" + stats.gwrAncillaryAddressesCount + "</td><td align=\"right\"><b>"
-                + (stats.osmBuildingAddressesCount + stats.osmNodeAddressesCount) + "</b></td><td align=\"right\"><b>" + stats.osmBuildingAddressesCount
-                + "</b></td><td align=\"right\"><b>" + stats.osmNodeAddressesCount + "</b></td>");
+        pw.println("<td><b>" + name + "</b></td><td></td><td></td><td align=\"right\"><b>" + stats.gwrAddressesCount + "</b></td><td align=\"right\">"
+                + stats.gwrAncillaryAddressesCount + "</td><td align=\"right\"><b>" + (stats.osmBuildingAddressesCount + stats.osmNodeAddressesCount)
+                + "</b></td><td align=\"right\"><b>" + stats.osmBuildingAddressesCount + "</b></td><td align=\"right\"><b>" + stats.osmNodeAddressesCount
+                + "</b></td>");
         pw.println("<td align=\"right\"><b>" + stats.matchingCount + "</b></td>");
         if (stats.gwrAddressesCount != 0) {
             pw.printf("<td align=\"right\">%1$d</td>", (int) (stats.matchingCount * 100f / stats.gwrAddressesCount));
