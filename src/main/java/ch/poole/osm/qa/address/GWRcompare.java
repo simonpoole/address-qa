@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -37,15 +38,17 @@ import org.jetbrains.annotations.Nullable;
 
 public class GWRcompare {
 
-    public static final int EARTH_RADIUS_EQUATOR = 6378137;
-    public static final int EARTH_RADIUS_POLAR   = 6356752;
+    private static final int EARTH_RADIUS_EQUATOR = 6378137;
+    private static final int EARTH_RADIUS_POLAR   = 6356752;
     /**
      * The arithmetic mean of the two WGS84 reference-ellipsoids.
      */
-    public static final int EARTH_RADIUS         = (EARTH_RADIUS_EQUATOR + EARTH_RADIUS_POLAR) / 2;
+    private static final int EARTH_RADIUS         = (EARTH_RADIUS_EQUATOR + EARTH_RADIUS_POLAR) / 2;
 
     // percentage of addresses that have to have the official flag set for it to be considered valid
     private static final float DEFAULT_OFFICIAL_VALID_LIMIT = 0.8F;
+
+    private static final int MATCHING_DISTANCE = 50;
 
     private static final String WARNINGS_DIR = "warnings";
     private static final String MISSING_DIR  = "missing";
@@ -380,7 +383,7 @@ public class GWRcompare {
                     }
 
                     // get GWR addresses
-                    Map<String, Address> gwrAddressesMap = new HashMap<>();
+                    MultiHashMap<String, Address> gwrAddressesMap = new MultiHashMap<>();
                     Map<String, Boolean> gwrHasValidation = new HashMap<>();
                     Map<Long, Address> seen = new HashMap<>();
                     gwrAddressQuery.setString(1, muniRef);
@@ -473,7 +476,7 @@ public class GWRcompare {
                         } else {
                             gwrAncillaryCount++;
                         }
-                        gwrAddressesMap.put(createKey(address.street, address.housenumber), address);
+                        gwrAddressesMap.add(createKey(address.street, address.housenumber), address);
                         seen.put(addressId, address);
                     }
                     // if more than OFFICIAL_VALID_LIMIT of the addresses have the official flag set assume that the
@@ -493,7 +496,7 @@ public class GWRcompare {
                     cantonalStats.gwrAddressesCount += gwrCount;
                     cantonalStats.gwrAncillaryAddressesCount += gwrAncillaryCount;
 
-                    Map<String, Address> osmAddresses = new HashMap<>();
+                    MultiHashMap<String, Address> osmAddresses = new MultiHashMap<>();
 
                     // get OSM addresses
                     osmBuildingAddressQuery.setLong(1, muniBoundaryId);
@@ -522,61 +525,87 @@ public class GWRcompare {
                     List<Address> distance = new ArrayList<>();
                     List<Address> place = new ArrayList<>();
                     List<Warnings> warnings = new ArrayList<>();
-                    for (Address gwr : new ArrayList<>(gwrAddressesMap.values())) {
+                    for (Address gwr : new ArrayList<>(gwrAddressesMap.getValues())) {
                         Address osm = null;
                         String key = null;
+                        int osmMatches = 0;
                         if (gwr.street == null) { // multilingual
                             for (String street : new String[] { gwr.streetDe, gwr.streetRm, gwr.streetFr, gwr.streetIt }) {
                                 if (street != null) {
                                     key = createKey(street, gwr.housenumber);
-                                    osm = osmAddresses.get(key);
-                                    if (osm != null) {
+                                    Set<Address> temp = osmAddresses.get(key);
+                                    osmMatches = temp.size();
+                                    if (!temp.isEmpty()) {
+                                        osm = temp.iterator().next();
                                         break;
                                     }
                                 }
                             }
                         } else {
                             key = createKey(gwr.street, gwr.housenumber);
-                            osm = osmAddresses.get(key);
+                            Set<Address> temp = osmAddresses.get(key);
+                            osmMatches = temp.size();
+                            if (!temp.isEmpty()) {
+                                for (Address o : temp) {
+                                    if (gwr.postcode.equals(o.postcode)) {
+                                        osm = o;
+                                        break;
+                                    }
+                                    if (haversineDistance(gwr.lon, gwr.lat, o.lon, o.lat) <= 50) {
+                                        osm = o;
+                                        break;
+                                    }
+                                }
+                            }
                         }
                         final boolean ancillary = gwr.isAncillary();
-
                         if (osm != null) {
-                            Warnings w = new Warnings(osm.osmGeom, osm.osmId, osm.lon, osm.lat);
-                            if (!gwr.postcode.equals(osm.postcode)) {
-                                postcode.add(osm);
-                                w.postcode = true;
-                                w.osmPostcode = osm.postcode;
-                                w.gwrPostcode = gwr.postcode;
-                            }
-                            if (!gwr.city.equals(osm.city)) {
-                                city.add(osm);
-                                w.city = true;
-                                w.osmCity = osm.city;
-                                w.gwrCity = gwr.city;
-                            }
-                            if (haversineDistance(gwr.lon, gwr.lat, osm.lon, osm.lat) > 50) {
-                                distance.add(osm);
-                                w.distance = true;
-                            }
-                            if (!SWISSTOPO_STREET_GEOM.equals(gwr.streetType) && osm.place == null) {
-                                place.add(osm);
-                                w.place = true;
-                            }
-                            w.notOfficial = !gwr.official;
-                            if (w.notOfficial && !ancillary) {
-                                notOfficial++;
+                            for (Address a : new ArrayList<>(osmAddresses.get(key))) {
+                                // skip addresses that would not have matched above
+                                final boolean noPostCodeMatch = !gwr.postcode.equals(a.postcode);
+                                double tempDistance = haversineDistance(gwr.lon, gwr.lat, a.lon, a.lat);
+
+                                if (noPostCodeMatch && tempDistance > 50) {
+                                    continue;
+                                }
+
+                                Warnings w = new Warnings(a.osmGeom, a.osmId, a.lon, a.lat);
+
+                                if (noPostCodeMatch) {
+                                    postcode.add(a);
+                                    w.postcode = true;
+                                    w.osmPostcode = a.postcode;
+                                    w.gwrPostcode = gwr.postcode;
+                                }
+                                if (!gwr.city.equals(a.city)) {
+                                    city.add(a);
+                                    w.city = true;
+                                    w.osmCity = a.city;
+                                    w.gwrCity = gwr.city;
+                                }
+                                if (tempDistance > MATCHING_DISTANCE) {
+                                    distance.add(a);
+                                    w.distance = true;
+                                }
+                                if (!SWISSTOPO_STREET_GEOM.equals(gwr.streetType) && a.place == null) {
+                                    place.add(a);
+                                    w.place = true;
+                                }
+                                w.notOfficial = !gwr.official;
+                                if (w.notOfficial && !ancillary) {
+                                    notOfficial++;
+                                }
+                                if (w.hasWarning()) {
+                                    warnings.add(w);
+                                }
+                                osmAddresses.removeItem(key, a);
                             }
                             if (ancillary) {
                                 matchingAncillary.add(osm);
                             } else {
-                                if (w.hasWarning()) {
-                                    warnings.add(w);
-                                }
                                 matching.add(osm);
                             }
-                            gwrAddressesMap.remove(key);
-                            osmAddresses.remove(key);
+                            gwrAddressesMap.removeItem(key, gwr);
                             continue;
                         }
                         if (!ancillary && (gwr.official || !gwrHasValidation.containsKey(muniRef))) {
@@ -584,7 +613,7 @@ public class GWRcompare {
                         }
                     }
                     int noStreet = 0;
-                    for (Address leftOver : osmAddresses.values()) {
+                    for (Address leftOver : osmAddresses.getValues()) {
                         Warnings w = new Warnings(leftOver.osmGeom, leftOver.osmId, leftOver.lon, leftOver.lat);
                         if (leftOver.street == null && leftOver.place == null) {
                             w.noStreet = true;
@@ -772,8 +801,8 @@ public class GWRcompare {
      * @return a count of addresses
      * @throws SQLException
      */
-    private static int getOsmAddresses(String osmGeom, Map<String, Address> osmAddresses, ResultSet addresses, Map<String, Address> gwrAddressesMap)
-            throws SQLException {
+    private static int getOsmAddresses(String osmGeom, MultiHashMap<String, Address> osmAddresses, ResultSet addresses,
+            MultiHashMap<String, Address> gwrAddressesMap) throws SQLException {
         int count = 0;
         while (addresses.next()) {
             count++;
@@ -781,7 +810,7 @@ public class GWRcompare {
             if (housenumber == null) {
                 Address address = new Address();
                 addNonNumberFields(osmGeom, addresses, address, gwrAddressesMap);
-                osmAddresses.put(createKey(address.street != null ? address.street : address.place, address.housename), address);
+                osmAddresses.add(createKey(address.street != null ? address.street : address.place, address.housename), address);
                 continue;
             }
             String[] numbers = housenumber.split("[;,]");
@@ -789,7 +818,7 @@ public class GWRcompare {
                 Address address = new Address();
                 address.housenumber = number.replaceAll("\\s", "");
                 addNonNumberFields(osmGeom, addresses, address, gwrAddressesMap);
-                osmAddresses.put(createKey(address.street != null ? address.street : address.place, address.housenumber), address);
+                osmAddresses.add(createKey(address.street != null ? address.street : address.place, address.housenumber), address);
             }
         }
         return count;
@@ -805,7 +834,7 @@ public class GWRcompare {
      * @throws SQLException
      */
     private static void addNonNumberFields(@NotNull String osmGeom, @NotNull ResultSet addresses, @NotNull Address address,
-            @NotNull Map<String, Address> gwrAddressesMap) throws SQLException {
+            @NotNull MultiHashMap<String, Address> gwrAddressesMap) throws SQLException {
         address.osmGeom = osmGeom;
         address.osmId = addresses.getLong(1);
         address.housename = addresses.getString(3);
