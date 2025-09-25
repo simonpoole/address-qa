@@ -248,6 +248,7 @@ public class GWRcompare {
         int osmNodeAddressesCount      = 0;
         int gwrAddressesCount          = 0;
         int gwrAncillaryAddressesCount = 0;
+        int gwrDuplicates              = 0;
         int matchingCount              = 0;
         int matchingAncillaryCount     = 0;
         int missingCount               = 0;
@@ -325,11 +326,11 @@ public class GWRcompare {
             pw.println("<H3>Updated - " + new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(System.currentTimeMillis())) + "</H3>");
             pw.println("<table class=\"sortable\">");
             pw.println("<tr><th>Municipality</th><th>Canton</th><th>GWR Data</th>" + "<th class=\"sorttable_numeric\">GWR</th>"
-                    + "<th class=\"sorttable_numeric\">GWR<BR>ancillary</th>" + "<th class=\"sorttable_numeric\">OSM<BR>Total</th>"
-                    + "<th class=\"sorttable_numeric\">OSM<BR>Buildings</th>" + "<th class=\"sorttable_numeric\">OSM<BR>Nodes</th>"
-                    + "<th class=\"sorttable_numeric\">Matching</th>" + "<th class=\"sorttable_numeric\">%<BR>Matching</th>"
-                    + "<th class=\"sorttable_numeric\">Matching<BR>ancillary</th>" + "<th class=\"sorttable_numeric\">Missing</th>"
-                    + "<th class=\"sorttable_numeric\">Different or<br>missing<br>postcode</th>"
+                    + "<th class=\"sorttable_numeric\">GWR<BR>ancillary</th>" + "<th class=\"sorttable_numeric\">GWR<BR>duplicates</th>"
+                    + "<th class=\"sorttable_numeric\">OSM<BR>Total</th>" + "<th class=\"sorttable_numeric\">OSM<BR>Buildings</th>"
+                    + "<th class=\"sorttable_numeric\">OSM<BR>Nodes</th>" + "<th class=\"sorttable_numeric\">Matching</th>"
+                    + "<th class=\"sorttable_numeric\">%<BR>Matching</th>" + "<th class=\"sorttable_numeric\">Matching<BR>ancillary</th>"
+                    + "<th class=\"sorttable_numeric\">Missing</th>" + "<th class=\"sorttable_numeric\">Different or<br>missing<br>postcode</th>"
                     + "<th class=\"sorttable_numeric\">Different or<br>missing<br>city</th>"
                     + "<th class=\"sorttable_numeric\">Distance<br>more than<br>50 m</th>"
                     + "<th class=\"sorttable_numeric\">addr:street<br>instead of<br>addr:place</th>"
@@ -516,6 +517,7 @@ public class GWRcompare {
 
                     //
                     int notOfficial = 0;
+                    int gwrDuplicates = 0;
                     //
                     List<Address> matching = new ArrayList<>();
                     List<Address> matchingAncillary = new ArrayList<>();
@@ -525,91 +527,110 @@ public class GWRcompare {
                     List<Address> distance = new ArrayList<>();
                     List<Address> place = new ArrayList<>();
                     List<Warnings> warnings = new ArrayList<>();
-                    for (Address gwr : new ArrayList<>(gwrAddressesMap.getValues())) {
-                        Address osm = null;
-                        String key = null;
-                        int osmMatches = 0;
-                        if (gwr.street == null) { // multilingual
-                            for (String street : new String[] { gwr.streetDe, gwr.streetRm, gwr.streetFr, gwr.streetIt }) {
-                                if (street != null) {
-                                    key = createKey(street, gwr.housenumber);
-                                    Set<Address> temp = osmAddresses.get(key);
-                                    osmMatches = temp.size();
-                                    if (!temp.isEmpty()) {
-                                        osm = temp.iterator().next();
-                                        break;
-                                    }
-                                }
+                    for (String k : new ArrayList<>(gwrAddressesMap.getKeys())) {
+                        List<Address> sameKey = new ArrayList<>(gwrAddressesMap.get(k));
+                        // check for duplicates
+                        // for now we count them and then remove all but one
+                        if (sameKey.size() > 1) {
+                            MultiHashMap<String, Address> samePostcode = new MultiHashMap<>();
+                            for (Address a : sameKey) {
+                                samePostcode.add(a.postcode, a);
                             }
-                        } else {
-                            key = createKey(gwr.street, gwr.housenumber);
-                            Set<Address> temp = osmAddresses.get(key);
-                            osmMatches = temp.size();
-                            if (!temp.isEmpty()) {
-                                for (Address o : temp) {
-                                    if (gwr.postcode.equals(o.postcode)) {
-                                        osm = o;
-                                        break;
-                                    }
-                                    if (haversineDistance(gwr.lon, gwr.lat, o.lon, o.lat) <= 50) {
-                                        osm = o;
-                                        break;
+                            for (String p : samePostcode.getKeys()) {
+                                List<Address> dups = new ArrayList<>(samePostcode.get(p));
+                                if (dups.size() > 1) {
+                                    gwrDuplicates += dups.size() - 1;
+                                    for (int i = 1; i < dups.size(); i++) {
+                                        gwrAddressesMap.removeItem(k, dups.get(i));
                                     }
                                 }
                             }
                         }
-                        final boolean ancillary = gwr.isAncillary();
-                        if (osm != null) {
-                            for (Address a : new ArrayList<>(osmAddresses.get(key))) {
-                                // skip addresses that would not have matched above
-                                final boolean noPostCodeMatch = !gwr.postcode.equals(a.postcode);
-                                double tempDistance = haversineDistance(gwr.lon, gwr.lat, a.lon, a.lat);
-
-                                if (noPostCodeMatch && tempDistance > 50) {
-                                    continue;
+                        for (Address gwr : new ArrayList<>(gwrAddressesMap.get(k))) {
+                            Address osm = null;
+                            String key = null;
+                            if (gwr.street == null) { // multilingual
+                                for (String street : new String[] { gwr.streetDe, gwr.streetRm, gwr.streetFr, gwr.streetIt }) {
+                                    if (street != null) {
+                                        key = createKey(street, gwr.housenumber);
+                                        Set<Address> temp = osmAddresses.get(key);
+                                        if (!temp.isEmpty()) {
+                                            osm = temp.iterator().next();
+                                            break;
+                                        }
+                                    }
                                 }
-
-                                Warnings w = new Warnings(a.osmGeom, a.osmId, a.lon, a.lat);
-
-                                if (noPostCodeMatch) {
-                                    postcode.add(a);
-                                    w.postcode = true;
-                                    w.osmPostcode = a.postcode;
-                                    w.gwrPostcode = gwr.postcode;
-                                }
-                                if (!gwr.city.equals(a.city)) {
-                                    city.add(a);
-                                    w.city = true;
-                                    w.osmCity = a.city;
-                                    w.gwrCity = gwr.city;
-                                }
-                                if (tempDistance > MATCHING_DISTANCE) {
-                                    distance.add(a);
-                                    w.distance = true;
-                                }
-                                if (!SWISSTOPO_STREET_GEOM.equals(gwr.streetType) && a.place == null) {
-                                    place.add(a);
-                                    w.place = true;
-                                }
-                                w.notOfficial = !gwr.official;
-                                if (w.notOfficial && !ancillary) {
-                                    notOfficial++;
-                                }
-                                if (w.hasWarning()) {
-                                    warnings.add(w);
-                                }
-                                osmAddresses.removeItem(key, a);
-                            }
-                            if (ancillary) {
-                                matchingAncillary.add(osm);
                             } else {
-                                matching.add(osm);
+                                key = createKey(gwr.street, gwr.housenumber);
+                                Set<Address> temp = osmAddresses.get(key);
+                                if (!temp.isEmpty()) {
+                                    double lowestDistance = Double.MAX_VALUE;
+                                    Address closest = null;
+                                    for (Address o : temp) {
+                                        double tempDistance = haversineDistance(gwr.lon, gwr.lat, o.lon, o.lat);
+                                        if (tempDistance < lowestDistance) {
+                                            closest = o;
+                                            lowestDistance = tempDistance;
+                                        }
+                                    }
+                                    if (gwr.postcode.equals(closest.postcode) || lowestDistance <= 50) {
+                                        osm = closest;
+                                    }
+                                }
                             }
-                            gwrAddressesMap.removeItem(key, gwr);
-                            continue;
-                        }
-                        if (!ancillary && (gwr.official || !gwrHasValidation.containsKey(muniRef))) {
-                            missing.add(gwr);
+                            final boolean ancillary = gwr.isAncillary();
+                            if (osm != null) {
+                                for (Address a : new ArrayList<>(osmAddresses.get(key))) {
+                                    // skip addresses that would not have matched above
+                                    final boolean noPostCodeMatch = !gwr.postcode.equals(a.postcode);
+                                    double tempDistance = haversineDistance(gwr.lon, gwr.lat, a.lon, a.lat);
+
+                                    if (noPostCodeMatch && tempDistance > 50) {
+                                        continue;
+                                    }
+
+                                    Warnings w = new Warnings(a.osmGeom, a.osmId, a.lon, a.lat);
+
+                                    if (noPostCodeMatch) {
+                                        postcode.add(a);
+                                        w.postcode = true;
+                                        w.osmPostcode = a.postcode;
+                                        w.gwrPostcode = gwr.postcode;
+                                    }
+                                    if (!gwr.city.equals(a.city)) {
+                                        city.add(a);
+                                        w.city = true;
+                                        w.osmCity = a.city;
+                                        w.gwrCity = gwr.city;
+                                    }
+                                    if (tempDistance > MATCHING_DISTANCE) {
+                                        distance.add(a);
+                                        w.distance = true;
+                                    }
+                                    if (!SWISSTOPO_STREET_GEOM.equals(gwr.streetType) && a.place == null) {
+                                        place.add(a);
+                                        w.place = true;
+                                    }
+                                    w.notOfficial = !gwr.official;
+                                    if (w.notOfficial && !ancillary) {
+                                        notOfficial++;
+                                    }
+                                    if (w.hasWarning()) {
+                                        warnings.add(w);
+                                    }
+                                    osmAddresses.removeItem(key, a);
+                                }
+                                if (ancillary) {
+                                    matchingAncillary.add(osm);
+                                } else {
+                                    matching.add(osm);
+                                }
+                                gwrAddressesMap.removeItem(key, gwr);
+                                continue;
+                            }
+                            if (!ancillary && (gwr.official || !gwrHasValidation.containsKey(muniRef))) {
+                                missing.add(gwr);
+                            }
                         }
                     }
                     int noStreet = 0;
@@ -635,6 +656,7 @@ public class GWRcompare {
                     global.notOfficialCount += notOfficial;
                     global.nonGWRCount += osmAddresses.size() - noStreet;
                     global.warningsCount += warnings.size();
+                    global.gwrDuplicates += gwrDuplicates;
 
                     cantonalStats.matchingCount += osmMatching;
                     cantonalStats.matchingAncillaryCount += matchingAncillary.size();
@@ -647,6 +669,7 @@ public class GWRcompare {
                     cantonalStats.notOfficialCount += notOfficial;
                     cantonalStats.nonGWRCount += osmAddresses.size() - noStreet;
                     cantonalStats.warningsCount += warnings.size();
+                    cantonalStats.gwrDuplicates += gwrDuplicates;
 
                     pw.print("<tr><td>" + muniName + "</td><td>" + muniCanton + "</td><td align=\"center\">" + "<a href=\"https://qa.poole.ch/addresses/GWR/"
                             + muniRef + ".zip\">S</a> <a href=\"https://qa.poole.ch/addresses/GWR/" + muniRef
@@ -655,6 +678,7 @@ public class GWRcompare {
                             + "_all.geojson.zip\">GA</a> <a href=\"https://qa.poole.ch/addresses/GWR/" + muniRef + "_all.osm.zip\">OA</a></td>");
                     pw.print("<td align=\"right\">" + gwrCount + "</td>");
                     pw.print("<td align=\"right\">" + gwrAncillaryCount + "</td>");
+                    pw.print("<td align=\"right\">" + gwrDuplicates + "</td>");
 
                     final int osmTotal = osmBuildingsCount + osmNodesCount;
 
@@ -709,13 +733,13 @@ public class GWRcompare {
                     }
                 }
                 pw.println("<tr class=\"sortbottom\">");
-                printStatsLine(pw, "TOTAL", global);
+                printStatsLine(pw, "TOTAL", global, true);
                 pw.println("</table>");
 
                 pw.println("<H4>Cantons</H4>");
                 pw.println("<table class=\"sortable\">");
-                pw.println("<tr><th>Canton</th><th></th><th></th><th class=\"sorttable_numeric\">GWR</th>"
-                        + "<th class=\"sorttable_numeric\">GWR<BR>ancillary</th>" + "<th class=\"sorttable_numeric\">OSM<BR>Total</th>"
+                pw.println("<tr><th>Canton</th><th class=\"sorttable_numeric\">GWR</th>" + "<th class=\"sorttable_numeric\">GWR<BR>ancillary</th>"
+                        + "<th class=\"sorttable_numeric\">GWR<BR>duplicates</th>" + "<th class=\"sorttable_numeric\">OSM<BR>Total</th>"
                         + "<th class=\"sorttable_numeric\">OSM<BR>Buildings</th>" + "<th class=\"sorttable_numeric\">OSM<BR>Nodes</th>"
                         + "<th class=\"sorttable_numeric\">Matching</th>" + "<th class=\"sorttable_numeric\">%<BR>Matching</th>"
                         + "<th class=\"sorttable_numeric\">Matching<BR>ancillary</th>" + "<th class=\"sorttable_numeric\">Missing</th>"
@@ -731,7 +755,7 @@ public class GWRcompare {
                 for (String canton : cantonsList) {
                     Stats cantonalStats = cantonal.get(canton);
                     pw.println("<tr>");
-                    printStatsLine(pw, canton, cantonalStats);
+                    printStatsLine(pw, canton, cantonalStats, false);
                     writeGeoJsonListToFile(cantonalStats.warnings, new File(warningsDir, canton + ".geojson"));
                     writeGeoJsonListToFile(cantonalStats.missing, new File(missingDir, canton + ".geojson"));
                 }
@@ -750,12 +774,17 @@ public class GWRcompare {
      * @param pw the PrintWriter
      * @param name name of the line
      * @param stats the Stats object
+     * @param fullGwrData if false suppress some fields
      */
-    private void printStatsLine(@NotNull PrintWriter pw, @NotNull String name, @NotNull Stats stats) {
-        pw.println("<td><b>" + name + "</b></td><td></td><td></td><td align=\"right\"><b>" + stats.gwrAddressesCount + "</b></td><td align=\"right\">"
-                + stats.gwrAncillaryAddressesCount + "</td><td align=\"right\"><b>" + (stats.osmBuildingAddressesCount + stats.osmNodeAddressesCount)
-                + "</b></td><td align=\"right\"><b>" + stats.osmBuildingAddressesCount + "</b></td><td align=\"right\"><b>" + stats.osmNodeAddressesCount
-                + "</b></td>");
+    private void printStatsLine(@NotNull PrintWriter pw, @NotNull String name, @NotNull Stats stats, boolean fullGwrData) {
+        pw.print("<td><b>" + name + "</b></td>");
+        if (fullGwrData) {
+            pw.print("<td></td><td></td>");
+        }
+        pw.println("<td align=\"right\"><b>" + stats.gwrAddressesCount + "</b></td><td align=\"right\">" + stats.gwrAncillaryAddressesCount
+                + "</td><td align=\"right\">" + stats.gwrDuplicates + "</td><td align=\"right\"><b>"
+                + (stats.osmBuildingAddressesCount + stats.osmNodeAddressesCount) + "</b></td><td align=\"right\"><b>" + stats.osmBuildingAddressesCount
+                + "</b></td><td align=\"right\"><b>" + stats.osmNodeAddressesCount + "</b></td>");
         pw.println("<td align=\"right\"><b>" + stats.matchingCount + "</b></td>");
         if (stats.gwrAddressesCount != 0) {
             pw.printf("<td align=\"right\">%1$d</td>", (int) (stats.matchingCount * 100f / stats.gwrAddressesCount));
