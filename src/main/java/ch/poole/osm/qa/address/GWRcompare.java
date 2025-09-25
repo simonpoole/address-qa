@@ -689,7 +689,7 @@ public class GWRcompare {
                     pw.println("<td align=\"right\">" + osmMatching + "</td>");
 
                     if (gwrCount != 0) {
-                        pw.printf("<td align=\"right\">%1$d</td>", (int) (osmMatching * 100f / gwrCount));
+                        pw.printf("<td align=\"right\">%1$d</td>", (int) (osmMatching * 100f / (gwrCount - gwrDuplicates)));
                     } else {
                         pw.print("<td align=\"right\">-</td>");
                     }
@@ -787,7 +787,7 @@ public class GWRcompare {
                 + "</b></td><td align=\"right\"><b>" + stats.osmNodeAddressesCount + "</b></td>");
         pw.println("<td align=\"right\"><b>" + stats.matchingCount + "</b></td>");
         if (stats.gwrAddressesCount != 0) {
-            pw.printf("<td align=\"right\">%1$d</td>", (int) (stats.matchingCount * 100f / stats.gwrAddressesCount));
+            pw.printf("<td align=\"right\">%1$d</td>", (int) (stats.matchingCount * 100f / (stats.gwrAddressesCount - stats.gwrDuplicates)));
         } else {
             pw.print("<td align=\"right\">-</td>");
         }
