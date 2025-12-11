@@ -109,7 +109,7 @@ public class GWRcompare {
 
         public boolean isAncillary() {
             Matcher m = housenumber != null ? ANCILLARY_NUMBER.matcher(housenumber) : null;
-            return gwrCategory == 1010 || gwrCategory == 1080 || gwrClass == 1242 || gwrClass == 1252 || (m != null && m.find());
+            return gwrCategory == 1010 || gwrCategory == 1080 || gwrClass == 1242 || gwrClass == 1252 || gwrClass == 1274 || (m != null && m.find());
         }
 
         /**
